@@ -81,6 +81,18 @@ cat > "$I/os/availability.h" <<'A'
 #define API_NOT_DEPRECATED
 #endif
 A
+# what the Libc of the SDK has and these sources do not: execinfo.h, the two spawn types
+[ -f "$I/execinfo.h" ] || cat > "$I/execinfo.h" <<'A'
+#ifndef _EXECINFO_H_
+#define _EXECINFO_H_
+int backtrace(void **, int);
+char **backtrace_symbols(void *const *, int);
+void backtrace_symbols_fd(void *const *, int, int);
+#endif
+A
+grep -q "posix_spawnattr_t;" "$I/spawn.h" || sed -i "" '1i\
+typedef void *posix_spawnattr_t; typedef void *posix_spawn_file_actions_t;
+' "$I/spawn.h"
 # the test: a small C program against this tree and nothing else
 RES=$(cc --print-resource-dir)/include
 cat > "$W/sdk/t.c" <<T
@@ -110,4 +122,4 @@ cat > "$W/sdk/tobjc.m" <<T
 @end
 int main(void) { CFStringRef s = CFSTR("x"); (void)s; return [Hello answer]; }
 T
-cc --target=x86_64-apple-macosx14.0 -x objective-c -fobjc-runtime=macosx -nostdinc -isystem "$(ls -d /usr/local/llvm*/lib/clang/*/include 2>/dev/null | tail -1)" -isystem "$I" -fsyntax-only -ferror-limit=6 "$W/sdk/tobjc.m" 2>&1 | head -14
+sh "$H/resolve-headers.sh" "$W" "$W/sdk/tobjc.m"

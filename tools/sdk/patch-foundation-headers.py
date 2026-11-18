@@ -63,7 +63,6 @@ typedef NSString *NSRunLoopMode;
 static const NSEdgeInsets NSEdgeInsetsZero = { 0, 0, 0, 0 };
 typedef NSUInteger NSComparisonPredicateModifier;
 extern NSString *const NSURLTypeIdentifierKey;
-extern const CFStringRef kCGColorSpaceSRGB;
 ''' + ('' if any('NSComparator' in open(os.path.join(os.path.dirname(fh), f), errors='ignore').read() for f in os.listdir(os.path.dirname(fh)) if f.endswith('.h') and f != 'NSSubscripting_pear.h') else 'typedef NSComparisonResult (^NSComparator)(id obj1, id obj2);\n') + '''@interface NSMutableArray<ObjectType> (PearMore)
 - (void)sortUsingComparator:(NSComparator)cmptr;
 @end
@@ -79,7 +78,41 @@ extern const CFStringRef kCGColorSpaceSRGB;
 - (void)addPointer:(void *)pointer;
 @end
 typedef NS_ENUM(NSUInteger, NSCompoundPredicateType) { NSNotPredicateType = 0, NSAndPredicateType, NSOrPredicateType };
-extern const CFStringRef kCGColorSpaceGenericRGB;
+@interface NSJSONSerialization : NSObject
++ (id)JSONObjectWithData:(NSData *)data options:(NSUInteger)opt error:(NSError **)error;
++ (NSData *)dataWithJSONObject:(id)obj options:(NSUInteger)opt error:(NSError **)error;
+@end
+typedef NS_ENUM(NSUInteger, NSFileWrapperWritingOptions) { NSFileWrapperWritingAtomic = 1 << 0, NSFileWrapperWritingWithNameUpdating = 1 << 1 };
+@interface NSFileWrapper : NSObject
+- (BOOL)writeToURL:(NSURL *)url options:(NSFileWrapperWritingOptions)options originalContentsURL:(NSURL *)originalContentsURL error:(NSError **)outError;
+- (NSData *)regularFileContents;
+@end
+typedef NSUInteger NSPredicateOperatorType;
+@interface NSExpression : NSObject
++ (NSExpression *)expressionForConstantValue:(id)obj;
++ (NSExpression *)expressionForKeyPath:(NSString *)keyPath;
+@end
+@interface NSComparisonPredicate : NSPredicate
+- (NSPredicateOperatorType)predicateOperatorType;
+- (NSExpression *)leftExpression;
+- (NSExpression *)rightExpression;
+@end
+@interface NSCompoundPredicate : NSPredicate
++ (NSPredicate *)andPredicateWithSubpredicates:(NSArray *)subpredicates;
+- (NSCompoundPredicateType)compoundPredicateType;
+- (NSArray *)subpredicates;
+@end
+@interface NSPropertyListSerialization (PearMore)
++ (id)propertyListWithData:(NSData *)data options:(NSUInteger)opt format:(NSUInteger *)format error:(NSError **)error;
++ (NSData *)dataWithPropertyList:(id)plist format:(NSUInteger)format options:(NSUInteger)opt error:(NSError **)error;
+@end
+@interface NSPointerArray (PearMore)
++ (NSPointerArray *)weakObjectsPointerArray;
+- (void)removePointerAtIndex:(NSUInteger)index;
+@end
+@interface NSArray<ObjectType> (PearMore3)
+- (NSArray<ObjectType> *)sortedArrayUsingComparator:(NSComparator)cmptr;
+@end
 @interface NSMutableIndexSet (PearMore)
 - (void)enumerateIndexesUsingBlock:(void (^)(NSUInteger idx, BOOL *stop))block;
 @end
@@ -88,4 +121,14 @@ extern const CFStringRef kCGColorSpaceGenericRGB;
 @property(readonly, copy) NSURL *executableURL;
 @end
 ''')
+cgdir = os.path.join(d, 'CoreGraphics')
+if os.path.isdir(cgdir):
+    open(os.path.join(cgdir, 'CGPear.h'), 'w').write('/* tools/sdk/patch-foundation-headers.py: declarations that the macOS SDK has and this CoreGraphics has not */\n' + '''typedef struct CGGradient *CGGradientRef;
+extern const CFStringRef kCGColorSpaceSRGB, kCGColorSpaceGenericRGB, kCGColorSpaceLinearGray, kCGColorSpaceGenericGrayGamma2_2, kCGColorSpaceGenericCMYK, kCGColorSpaceDisplayP3;
+CGRect CGRectApplyAffineTransform(CGRect rect, CGAffineTransform t);
+CGAffineTransform CGAffineTransformInvert(CGAffineTransform t);
+CGRect CGPathGetPathBoundingBox(CGPathRef path);
+''')
+    cgh = os.path.join(cgdir, 'CoreGraphics.h'); t = open(cgh).read()
+    if 'CGPear.h' not in t: open(cgh, 'w').write(t.rstrip('\n') + '\n#import <CoreGraphics/CGPear.h>\n')
 print('patched:', ', '.join(done), '+ NSSubscripting_pear.h')
