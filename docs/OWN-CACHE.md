@@ -2,8 +2,9 @@
 
 Source read: `upstream/dyld` (dyld-1378, APSL 2.0). Questions: can the real dyld run our own libraries, and can we build a cache with Apple's builder?
 
-## 1. The real dyld on macOS needs a shared cache
-`dyld/DyldProcessConfig.cpp` (about lines 1216-1230 and 1404-1420): on macOS, if the kernel reports that there is no cache, dyld stops (`halt("no shared cache in cryptex")`, or "no shared cache available"). `DYLD_SHARED_REGION=avoid`, the mode that runs a process with its dylibs on disk, is supported **only on the simulator** (`TARGET_OS_SIMULATOR`, with caches built locally). So with Apple's dyld unchanged, our own libSystem / libdispatch / libobjc have to be **inside a cache** (built by us), or dyld has to be built differently (from this source, as a simulator-style or patched one).
+## 1. CORRECTION (2026-11-18): the real dyld does NOT need a shared cache here
+The first version of this note said that the real dyld stops without a cache. That was a wrong reading. The `halt("no shared cache in cryptex")` and "no shared cache available" lines of `dyld/DyldProcessConfig.cpp` (about 1216-1230) are in the *ignition* path, which only runs `if ( process.pid == 1 )`, not for an ordinary process. And `darwinator` already has the mode for it: `sysctl kern.darwinator.use_cache=0` makes the kernel refuse the shared region of the cache, and dyld "goes on without it and loads every framework from the disk: a root with our own frameworks" (`darwinator/src/syscalls_dyld.c`). (`DYLD_SHARED_REGION=avoid` is a different thing, supported only for the simulator.)
+So **a cache of our own is not needed** to run Mach-O programs on our own libraries: the dylibs go on the disk (a root with libSystem, libdispatch, libobjc, ... built by us) and `use_cache=0`. What this changes: sections 2-5 below (the cache builder) are about an optimisation (startup time, memory), not about a requirement. The real work is the dylibs. Not verified: a program running with `use_cache=0` on dylibs built by us (the test run of 2026-11-18 is described at the end).
 
 ## 2. What the cache builder is made of (all in `upstream/dyld`)
 `cache_builder/` (20 C++ files, entry points `dyld_shared_cache_builder.mm`, `update_dyld_shared_cache.cpp`, `mrm_shared_cache_builder.cpp`), `mach_o/` (30), `mach_o_writer/` (16), `common/` (26), `shared_cache_linker/`. Only an Xcode project, no CMake or Makefile.
@@ -20,5 +21,5 @@ Not tried: a compile of any of it. The count above comes from the `#include` lin
 2. The dylibs to put in a cache: nothing of libSystem is built from our sources yet.
 3. Alternative to the builder: a cache writer of our own (the cache format is documented by `include/mach-o/dyld_cache_format.h`) for a minimal cache; also unstarted.
 
-## 5. Order that follows
+## 5. Order that follows (only if a cache is wanted later)
 (a) bring xnu's headers (sparse) into `upstream/` with provenance and try to compile `mach_o/` alone (a syntax-only pass to count the errors); (b) build the smallest real libSystem pieces with `ld64.lld`; (c) only then decide: port the builder or write a minimal cache writer; (d) in parallel look at running dyld from this source (without the cache requirement) on `darwinator`.
