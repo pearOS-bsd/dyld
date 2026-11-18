@@ -6,6 +6,7 @@ rm -rf "$W/sdk"; mkdir -p "$I"/objc "$I"/CoreFoundation "$I"/sys "$I"/mach "$I"/
 cp -R "$W"/CarbonHeaders/*.h "$I"/ 2>/dev/null; sed -i "" -e "s/@CONFIG_EMBEDDED@/0/g" -e "s/@CONFIG_[A-Z_]*@/0/g" "$I"/TargetConditionals.h
 cp -R "$X"/EXTERNAL_HEADERS/* "$I"/ 2>/dev/null; rm -f "$I"/Makefile "$I"/Info.plist
 cp -R "$W"/Libc/include/* "$I"/ 2>/dev/null
+for f in pwd.h grp.h; do for d in "$W"/Libinfo; do p=$(find "$d" -name "$f" 2>/dev/null | head -1); [ -n "$p" ] && cp "$p" "$I"/; done; done
 cp -R "$X"/bsd/sys/* "$I"/sys/ 2>/dev/null; cp -R "$X"/bsd/machine/* "$I"/machine/ 2>/dev/null; cp -R "$X"/bsd/i386/* "$I"/i386/ 2>/dev/null
 for d in net netinet netinet6 arpa bsm; do [ -d "$X/bsd/$d" ] && { mkdir -p "$I/$d"; cp "$X"/bsd/$d/*.h "$I/$d/" 2>/dev/null; }; done
 cp "$X"/bsd/uuid/*.h "$I"/uuid/ 2>/dev/null
@@ -93,6 +94,8 @@ A
 grep -q "posix_spawnattr_t;" "$I/spawn.h" || sed -i "" '1i\
 typedef void *posix_spawnattr_t; typedef void *posix_spawn_file_actions_t;
 ' "$I/spawn.h"
+# dlfcn.h and the mach-o/dyld headers are in the dyld repository
+cp "$W"/dyld/include/dlfcn.h "$I"/ 2>/dev/null; cp "$W"/dyld/include/mach-o/*.h "$I"/mach-o/ 2>/dev/null
 # the test: a small C program against this tree and nothing else
 RES=$(cc --print-resource-dir)/include
 cat > "$W/sdk/t.c" <<T
@@ -104,6 +107,35 @@ cat > "$W/sdk/t.c" <<T
 #include <dispatch/dispatch.h>
 #include <mach/mach.h>
 #include <mach-o/loader.h>
+#include <pwd.h>
+#include <grp.h>
+#include <signal.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <math.h>
+#include <time.h>
+#include <poll.h>
+#include <dirent.h>
+#include <libgen.h>
+#include <syslog.h>
+#include <termios.h>
+#include <sys/stat.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <sys/mman.h>
+#include <sys/ioctl.h>
+#include <sys/time.h>
+#include <sys/wait.h>
+#include <sys/sysctl.h>
+#include <sys/select.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <spawn.h>
+#include <execinfo.h>
+#include <dlfcn.h>
+#include <inttypes.h>
+#include <stdbool.h>
 int main(void) { printf("%d\n", (int)sizeof(struct mach_header_64)); return 0; }
 T
 # the headers that are still missing are looked for in the fetched sources and copied in

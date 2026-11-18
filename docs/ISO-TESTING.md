@@ -13,3 +13,16 @@ The image has `darwinator.ko`, `machrun`, `open` and a kernel that fits the modu
 
 Result of 2026-11-18 (ISO of run 12 of the iso workflow): the Objective-C program of `macho-toolchain/objc`, built on FreeBSD without any file of Apple's, prints `objc: Hello answer = 42` in the image through `machrun`.
 Not tried: the real dyld path (`kern.darwinator.dyld=1`, needs the Mac's `/usr/lib/dyld` and frameworks, which are the owner's and not in the image) and `/open/AppKit`.
+
+
+## Real dyld in the ISO image (2026-11-18)
+
+Verified on the ISO (test VM, `kern.darwinator.dyld=1`, binmisc `macho64`/`machofat` disabled so the kernel path runs, not `machrun`):
+
+- the thin x86_64 slice of the Mac's `/usr/lib/dyld` at `/usr/lib/dyld`, the cache files on a second disk mounted at `/System/Volumes` (`Preboot/Cryptexes/OS/System/Library/dyld/`);
+- `kern.darwinator.two_volumes=2` and `kern.darwinator.fast_sleep_ms=5` are needed: with `two_volumes=1` dyld loops in `getfsstat64` forever (six volumes, it never settles);
+- the Mac's own `/bin/echo` and `/bin/date`, a C program and an Objective-C program built on FreeBSD all print correctly;
+- `dlopen("/open/AppKit")` (AppKit built on FreeBSD by `open/build-appkit-bsd.sh`, 239/239 sources) succeeds and registers 251 classes (NSView, NSWindow, NSApplication, NSMenu ...).
+
+Fixes that made it load: `XNU_PLATFORM_MacOSX` (no `$UNIX2003` symbols), `NSMakeRange`/`NSMaxRange`/`NSEqualRects`/`NSEqualSizes`/`NSIntersectsRect` static inline, `MIN`/`MAX`/`ABS` macros, `pwd.h`/`grp.h` from Libinfo.
+Not done: `NSGlassEffectView` and `OpenBackend` are not in this AppKit yet; no window opened (needs WindowServer + a client).

@@ -92,12 +92,16 @@ typedef NSUInteger NSPredicateOperatorType;
 + (NSExpression *)expressionForConstantValue:(id)obj;
 + (NSExpression *)expressionForKeyPath:(NSString *)keyPath;
 @end
+typedef NS_ENUM(NSUInteger, PearPredOps) { NSLessThanPredicateOperatorType = 0, NSLessThanOrEqualToPredicateOperatorType, NSGreaterThanPredicateOperatorType, NSGreaterThanOrEqualToPredicateOperatorType, NSEqualToPredicateOperatorType, NSNotEqualToPredicateOperatorType, NSMatchesPredicateOperatorType, NSLikePredicateOperatorType, NSBeginsWithPredicateOperatorType, NSEndsWithPredicateOperatorType, NSInPredicateOperatorType, NSCustomSelectorPredicateOperatorType, NSContainsPredicateOperatorType = 99, NSBetweenPredicateOperatorType = 100 };
 @interface NSComparisonPredicate : NSPredicate
++ (NSComparisonPredicate *)predicateWithLeftExpression:(NSExpression *)lhs rightExpression:(NSExpression *)rhs modifier:(NSComparisonPredicateModifier)modifier type:(NSPredicateOperatorType)type options:(NSUInteger)options;
+- (NSComparisonPredicateModifier)comparisonPredicateModifier;
 - (NSPredicateOperatorType)predicateOperatorType;
 - (NSExpression *)leftExpression;
 - (NSExpression *)rightExpression;
 @end
 @interface NSCompoundPredicate : NSPredicate
+- (instancetype)initWithType:(NSCompoundPredicateType)type subpredicates:(NSArray *)subpredicates;
 + (NSPredicate *)andPredicateWithSubpredicates:(NSArray *)subpredicates;
 - (NSCompoundPredicateType)compoundPredicateType;
 - (NSArray *)subpredicates;
@@ -131,4 +135,18 @@ CGRect CGPathGetPathBoundingBox(CGPathRef path);
 ''')
     cgh = os.path.join(cgdir, 'CoreGraphics.h'); t = open(cgh).read()
     if 'CGPear.h' not in t: open(cgh, 'w').write(t.rstrip('\n') + '\n#import <CoreGraphics/CGPear.h>\n')
+
+# NSMakeRange and the geometry helpers are static inline in the macOS SDK (the real Foundation does not export them)
+for f, rep in (
+    ('NSRange.h', [(r'FOUNDATION_EXPORT NSRange NSMakeRange\(NSUInteger location, NSUInteger length\);', 'static inline NSRange NSMakeRange(NSUInteger location, NSUInteger length) { NSRange r; r.location = location; r.length = length; return r; }'),
+                   (r'FOUNDATION_EXPORT NSUInteger NSMaxRange\(NSRange range\);', 'static inline NSUInteger NSMaxRange(NSRange range) { return range.location + range.length; }')]),
+    ('NSGeometry.h', [(r'FOUNDATION_EXPORT BOOL NSEqualRects\(NSRect rect0, NSRect rect1\);', 'static inline BOOL NSEqualRects(NSRect a, NSRect b) { return a.origin.x == b.origin.x && a.origin.y == b.origin.y && a.size.width == b.size.width && a.size.height == b.size.height; }'),
+                      (r'FOUNDATION_EXPORT BOOL NSEqualSizes\(NSSize size0, NSSize size1\);', 'static inline BOOL NSEqualSizes(NSSize a, NSSize b) { return a.width == b.width && a.height == b.height; }'),
+                      (r'FOUNDATION_EXPORT BOOL NSIntersectsRect\(NSRect rect0, NSRect rect1\);', 'static inline BOOL NSIntersectsRect(NSRect a, NSRect b) { return a.origin.x < b.origin.x + b.size.width && b.origin.x < a.origin.x + a.size.width && a.origin.y < b.origin.y + b.size.height && b.origin.y < a.origin.y + a.size.height; }')]),
+):
+    for pat, r in rep:
+        sub(f, pat, r)
+
+# MIN, MAX and ABS are macros of NSObjCRuntime.h in the macOS SDK
+sub('NSObjCRuntime.h', r'(#define NS_INLINE static inline)', r'\1\n#ifndef MAX\n#define MAX(A,B) ({ __typeof__(A) __a = (A); __typeof__(B) __b = (B); __a < __b ? __b : __a; })\n#endif\n#ifndef MIN\n#define MIN(A,B) ({ __typeof__(A) __a = (A); __typeof__(B) __b = (B); __a < __b ? __a : __b; })\n#endif\n#ifndef ABS\n#define ABS(A) ({ __typeof__(A) __a = (A); __a < 0 ? -__a : __a; })\n#endif')
 print('patched:', ', '.join(done), '+ NSSubscripting_pear.h')
