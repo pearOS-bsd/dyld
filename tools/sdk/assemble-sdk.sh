@@ -2,8 +2,8 @@
 # assembles a header tree of a Darwin SDK from the open sources that fetch-sources.sh brought (nothing of an Xcode SDK is used) and tries it with a small C program:
 #   sh tools/sdk/assemble-sdk.sh [WORK]      -> WORK/sdk/usr/include       (run fetch-sources.sh, build-migcom.sh and gen-headers.sh first)
 W="${1:-/root/oss}"; I="$W/sdk/usr/include"; X="$W/xnu"; H="$(cd "$(dirname "$0")" && pwd)"
-rm -rf "$W/sdk"; mkdir -p "$I"/sys "$I"/mach "$I"/machine "$I"/i386 "$I"/libkern "$I"/os "$I"/pthread "$I"/dispatch "$I"/uuid "$I"/malloc
-cp -R "$W"/CarbonHeaders/*.h "$I"/ 2>/dev/null
+rm -rf "$W/sdk"; mkdir -p "$I"/objc "$I"/CoreFoundation "$I"/sys "$I"/mach "$I"/machine "$I"/i386 "$I"/libkern "$I"/os "$I"/pthread "$I"/dispatch "$I"/uuid "$I"/malloc
+cp -R "$W"/CarbonHeaders/*.h "$I"/ 2>/dev/null; sed -i "" -e "s/@CONFIG_EMBEDDED@/0/g" -e "s/@CONFIG_[A-Z_]*@/0/g" "$I"/TargetConditionals.h
 cp -R "$X"/EXTERNAL_HEADERS/* "$I"/ 2>/dev/null; rm -f "$I"/Makefile "$I"/Info.plist
 cp -R "$W"/Libc/include/* "$I"/ 2>/dev/null
 cp -R "$X"/bsd/sys/* "$I"/sys/ 2>/dev/null; cp -R "$X"/bsd/machine/* "$I"/machine/ 2>/dev/null; cp -R "$X"/bsd/i386/* "$I"/i386/ 2>/dev/null
@@ -14,7 +14,7 @@ cp "$X"/osfmk/mach/*.h "$I"/mach/ 2>/dev/null; cp -R "$X"/osfmk/mach/machine "$X
 cp -R "$W"/libplatform/include/* "$I"/ 2>/dev/null
 cp "$W"/libpthread/include/pthread/*.h "$I"/pthread/; cp "$W"/libpthread/include/pthread/pthread.h "$W"/libpthread/include/pthread/sched.h "$W"/libpthread/include/pthread/spawn.h "$W"/libpthread/include/pthread/qos.h "$I"/ 2>/dev/null; cp -R "$W"/libpthread/include/sys/* "$I"/sys/ 2>/dev/null
 cp "$W"/libdispatch/dispatch/*.h "$I"/dispatch/; cp "$W"/libdispatch/os/*.h "$I"/os/ 2>/dev/null
-cp "$W"/inc/sys/*.h "$I"/sys/ 2>/dev/null; cp "$W"/libmalloc/include/malloc/*.h "$I"/malloc/ 2>/dev/null
+cp "$W"/objc4/runtime/*.h "$I"/objc/ 2>/dev/null; cp "$W"/CF/*.h "$I"/CoreFoundation/ 2>/dev/null; cp "$W"/inc/sys/*.h "$I"/sys/ 2>/dev/null; cp "$W"/libmalloc/include/malloc/*.h "$I"/malloc/ 2>/dev/null
 # the headers that MIG makes from the interface definitions of xnu (the user side: mach/mach_vm.h, mach/mach_host.h ...)
 MIG="$W/build/mig/migcom"; n=0; f=0
 for defs in mach_vm mach_host host_priv host_security task thread_act vm_map mach_port clock clock_priv clock_reply processor processor_set semaphore lock_set exc mach_exc mach_voucher memory_entry notify mach_notify task_access mach_eventlink; do
@@ -96,3 +96,18 @@ int main(void) { printf("%d\n", (int)sizeof(struct mach_header_64)); return 0; }
 T
 # the headers that are still missing are looked for in the fetched sources and copied in
 sh "$H/resolve-headers.sh" "$W" "$W/sdk/t.c"
+# Objective-C: a class and a CoreFoundation call, built for the Apple runtime
+cat > "$W/sdk/tobjc.m" <<T
+#import <objc/NSObject.h>
+#import <objc/runtime.h>
+#import <objc/message.h>
+#import <CoreFoundation/CoreFoundation.h>
+@interface Hello : NSObject
++ (int)answer;
+@end
+@implementation Hello
++ (int)answer { return 42; }
+@end
+int main(void) { CFStringRef s = CFSTR("x"); (void)s; return [Hello answer]; }
+T
+cc --target=x86_64-apple-macosx14.0 -x objective-c -fobjc-runtime=macosx -nostdinc -isystem "$(ls -d /usr/local/llvm*/lib/clang/*/include 2>/dev/null | tail -1)" -isystem "$I" -fsyntax-only -ferror-limit=6 "$W/sdk/tobjc.m" 2>&1 | head -14
