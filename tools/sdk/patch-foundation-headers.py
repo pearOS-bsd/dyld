@@ -51,4 +51,41 @@ open(extra, 'a').write('''
 typedef struct NSEdgeInsets { CGFloat top, left, bottom, right; } NSEdgeInsets;
 static inline NSEdgeInsets NSEdgeInsetsMake(CGFloat top, CGFloat left, CGFloat bottom, CGFloat right) { NSEdgeInsets e = { top, left, bottom, right }; return e; }
 ''')
+if 'NS_NOESCAPE' not in open(fh).read():
+    t = open(fh).read()
+    t = t.replace('#define NS_OPTIONS', '#ifndef NS_NOESCAPE\n#define NS_NOESCAPE __attribute__((noescape))\n#endif\n#define NS_EXTENSIBLE_STRING_ENUM\n#define NS_STRING_ENUM\n#define NS_TYPED_ENUM\n#define NS_TYPED_EXTENSIBLE_ENUM\n#define NS_OPTIONS', 1)
+    open(fh, 'w').write(t)
+open(extra, 'a').write('''
+typedef NSString *NSRunLoopMode;
+@protocol NSSecureCoding <NSCoding>
++ (BOOL)supportsSecureCoding;
+@end
+static const NSEdgeInsets NSEdgeInsetsZero = { 0, 0, 0, 0 };
+typedef NSUInteger NSComparisonPredicateModifier;
+extern NSString *const NSURLTypeIdentifierKey;
+extern const CFStringRef kCGColorSpaceSRGB;
+''' + ('' if any('NSComparator' in open(os.path.join(os.path.dirname(fh), f), errors='ignore').read() for f in os.listdir(os.path.dirname(fh)) if f.endswith('.h') and f != 'NSSubscripting_pear.h') else 'typedef NSComparisonResult (^NSComparator)(id obj1, id obj2);\n') + '''@interface NSMutableArray<ObjectType> (PearMore)
+- (void)sortUsingComparator:(NSComparator)cmptr;
+@end
+@interface NSArray<ObjectType> (PearMore2)
+- (NSUInteger)indexOfObjectPassingTest:(BOOL (^)(ObjectType obj, NSUInteger idx, BOOL *stop))predicate;
+@end
+@interface NSURL (PearMore)
+- (BOOL)getResourceValue:(id *)value forKey:(NSString *)key error:(NSError **)error;
+@end
+@interface NSPointerArray : NSObject
+@property(readonly) NSUInteger count;
+- (void *)pointerAtIndex:(NSUInteger)index;
+- (void)addPointer:(void *)pointer;
+@end
+typedef NS_ENUM(NSUInteger, NSCompoundPredicateType) { NSNotPredicateType = 0, NSAndPredicateType, NSOrPredicateType };
+extern const CFStringRef kCGColorSpaceGenericRGB;
+@interface NSMutableIndexSet (PearMore)
+- (void)enumerateIndexesUsingBlock:(void (^)(NSUInteger idx, BOOL *stop))block;
+@end
+@interface NSBundle (PearMore)
+@property(readonly, copy) NSURL *bundleURL;
+@property(readonly, copy) NSURL *executableURL;
+@end
+''')
 print('patched:', ', '.join(done), '+ NSSubscripting_pear.h')
