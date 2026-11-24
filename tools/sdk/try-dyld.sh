@@ -34,6 +34,18 @@ cat > $C/__config_site <<'S'
 #endif
 S
 cp $L/vendor/llvm/default_assertion_handler.in $C/__assertion_handler
+# availability: the headers of the tree define the macros in terms of attributes that the open tree cannot resolve; override them with empty ones (placed first in the include path)
+mkdir -p $C/avail/os
+LIST="__OSX_DEPRECATED __OSX_AVAILABLE __OSX_AVAILABLE_STARTING __OSX_AVAILABLE_BUT_DEPRECATED __OSX_AVAILABLE_BUT_DEPRECATED_MSG __API_AVAILABLE __API_UNAVAILABLE __API_DEPRECATED __API_DEPRECATED_WITH_REPLACEMENT __API_AVAILABLE_BEGIN __API_AVAILABLE_END __API_DEPRECATED_BEGIN __API_DEPRECATED_END __API_UNAVAILABLE_BEGIN __API_UNAVAILABLE_END __SPI_AVAILABLE __OS_AVAILABILITY __OSX_AVAILABLE_BUT_DEPRECATED_MSG"
+for h in Availability.h AvailabilityMacros.h AvailabilityInternal.h os/availability.h; do
+  { echo "#include_next <$h>"; for m in $LIST; do echo "#undef $m"; echo "#define $m(...)"; done; echo "#undef __OSX_UNAVAILABLE"; echo "#define __OSX_UNAVAILABLE"; } > $C/avail/$h
+done
+# headers the open sources do not give: copy what exists, generate sys/syscall.h from syscalls.master, stub the private ones
+mkdir -p $I/kern
+cp $W/xnu/osfmk/kern/kcdata.h $I/kern/ 2>/dev/null; cp $W/Libc/darwin/libc_private.h $I/ 2>/dev/null
+awk '/^[0-9]+[ \t]/ { n=$1; if (match($0,/[{][^}]*[}]/)) { d=substr($0,RSTART,RLENGTH); if (match(d,/[a-z_0-9A-Z]+[(]/)) { nm=substr(d,RSTART,RLENGTH-1); print "#define\tSYS_" nm "\t" n } } }' $W/xnu/bsd/kern/syscalls.master > $I/sys/syscall.h
+[ -f $I/sandbox.h ] || echo "/* stub: private header, not in the open sources */" > $I/sandbox.h
+mkdir -p $I/os $I/sandbox; cp $W/xnu/libkern/os/base_private.h $I/os/ 2>/dev/null; cp $W/xnu/libsyscall/mach/mach/mach_init.h $I/mach/ 2>/dev/null; [ -f $I/CrashReporterClient.h ] || echo "/* stub: private header, not in the open sources */" > $I/CrashReporterClient.h; [ -f $I/sandbox/private.h ] || echo "/* stub */" > $I/sandbox/private.h; [ -f $I/os/atomic_private.h ] || echo "/* stub: not in the open sources */" > $I/os/atomic_private.h
 # the FreeBSD flavour of Libc's xlocale_private.h is C only: add the casts C++ needs
 sed -i "" -e "s/struct xlocale_refcounted \*obj = val;/struct xlocale_refcounted *obj = (struct xlocale_refcounted *)val;/" $I/xlocale_private.h 2>/dev/null
 cat > $C/dyld_prelude.h <<'P'
@@ -66,7 +78,7 @@ struct fat_arch_64 { int32_t cputype; int32_t cpusubtype; uint64_t offset; uint6
 P
 RES=$(ls -d /usr/local/llvm21/lib/clang/*/include | tail -1); CXX=/usr/local/llvm21/bin/clang++
 cd $W/dyld
-FL="--target=x86_64-apple-macosx14.0 -std=c++20 -fsyntax-only -nostdinc -nostdinc++ -isystem $C -isystem $L/include -isystem $W/llvm-libcxx/libcxxabi/include -isystem $RES -isystem $I -include $C/dyld_prelude.h -I$W/dyld -Idyld/lsl -I$W/libplatform/private -I$W/xnu/libsyscall/wrappers/libproc -Idyld -Icommon -Iinclude -Imach_o -Imach_o_writer -DBUILDING_DYLD=1 -DSUPPORT_VM_LAYOUT=1 -w -ferror-limit=0"
+FL="--target=x86_64-apple-macosx14.0 -std=c++20 -fsyntax-only -nostdinc -nostdinc++ -isystem $C/avail -isystem $C -isystem $L/include -isystem $W/llvm-libcxx/libcxxabi/include -isystem $RES -isystem $I -include $C/dyld_prelude.h -I$W/dyld -Ilsl -I$W/libplatform/private -I$W/xnu/libsyscall/wrappers/libproc -Idyld -Icommon -Iinclude -Iinclude/mach-o -Imach_o -Imach_o_writer -DDYLD_EXCLAVEKIT_UNAVAILABLE= -DDYLD_DRIVERKIT_UNAVAILABLE= -Ilibdyld -Icache_builder -DBUILDING_DYLD=1 -DSUPPORT_VM_LAYOUT=1 -w -ferror-limit=0"
 ok=0; bad=0; : > /tmp/dyld-errs.txt; : > /tmp/dyld-fail.txt
 for f in dyld/*.cpp common/*.cpp mach_o/*.cpp; do
   if $CXX $FL $f 2>/tmp/e.txt; then ok=$((ok+1)); else bad=$((bad+1)); echo $f >> /tmp/dyld-fail.txt; grep -E "error" /tmp/e.txt | sed -E 's/^[^ ]+ //' >> /tmp/dyld-errs.txt; fi
